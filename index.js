@@ -8,7 +8,7 @@ const efsClient = require('fs');
 const s3Client = new AWS.S3();
 
 //destination efs folder structure
-const efsDir = process.env.DEST_FOLDER;
+const efsDir = process.env.DESTINATION_FOLDER;
 
 exports.handler = async (event, context, callback) => {
 

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Data-Channels processor to mask PII data
+Description: Funtion to move the filesout file to datapump efs
 Transform: AWS::Serverless-2016-10-31
 
 Parameters:
@@ -9,123 +9,77 @@ Parameters:
   ProductLine:
     Type: String
     Default: data-channels
-    
+  vpcStackName:
+    Description: VPC and file system stack name
+    Type: String
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: sg-fa7133bc
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: The list of SubnetIDs in your Virtual Private Cloud (VPC)
+    Default: subnet-80c98eae,subnet-04878f4e,subnet-e19ce486,subnet-bfc9fbb0,subnet-0bc28757,subnet-96c847a8
+  EFSpath:
+    Default: "/mnt/files"
+    Description: File system mount path
+    Type: String
+  AccessPointARN:
+    Type: String
+    Description: Access point ARN
+
 Resources:
-  MaskDataFunction:
+  sffilemovementfunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: "./"
-      FunctionName: starfish-data-channels-BuiltInProcessor
+      FunctionName: st-file-move-BuiltInProcessor
       Handler: dist/index.handler
       # change timeout, memory, and node version to meet your needs.  node 12 or higher is required by data channels
       Timeout: 900
       MemorySize: 3008
       Runtime: nodejs12.x
+      VpcConfig:
+        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: !Ref SubnetIDs
+      FileSystemConfigs:
+      - Arn: !Ref AccessPointARN
+        LocalMountPath: !Ref EFSpath    
+      Environment:
+          Variables:
+            DESTINATION_FOLDER: !Ref EFSpath              
       Policies:
       # this statement allows your lambda the ability to trigger the built-in data channel log grabber lambda which will grab
       # cloudwatch logs and put them in s3 for further analysis
       - Statement:
-          Action: lambda:InvokeFunction
+        - Sid: SFLambdaVPCAccessExecutionRole
           Effect: Allow
-          Resource: 'arn:aws:lambda:*:*:function:cdk-data-channels-core-st-cfdatachannelsloggrabber'
-      - Statement:
-        - Sid: DynamoDBPolicy        
           Action:
-            - 'dynamodb:Scan'
-            - 'dynamodb:BatchWriteItem'
-            - 'dynamodb:BatchGetItem'
-          Effect: Allow                
-          Resource: '*' 
-      - Statement:
-        - Sid: S3WorkspaceListBucketPolicy           
-          Action:
-            - s3:GetBucketLocation
-            - s3:ListBucket
-            - s3:ListBucketMultipartUploads
-            - s3:ListMultipartUploadParts
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:AttachNetworkInterface
+          Resource: "*"
+        - Sid: SFElasticFileSystemClientFullAccess
           Effect: Allow
-          Resource:
-            arn:aws:s3:::data-channels-work-*
-      - Statement:
-        - Sid: S3WorkspaceChangePolicy        
           Action:
-            - s3:*
-          Effect: Allow
-          Resource:
-            arn:aws:s3:::data-channels-work-*/workspace/athena/*
-      - Statement:
-        - Sid: AthenaDBQueryPolicy
-          Action:
-            - athena:StartQueryExecution
-            - athena:GetQueryExecution
-          Effect: Allow
-          Resource:
-            arn:aws:athena:*:*:workgroup/primary          
+             - elasticfilesystem:ClientWrite
+             - elasticfilesystem:DescribeMountTargets
+          Resource: "*"       
+  ImageBucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref sffilemovementfunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Sub arn:aws:s3:::sf-file-move-pl
 
-  piifFileConfig:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: piifFileConfig
-      AttributeDefinitions:
-      - AttributeName: fileName
-        AttributeType: S
-      KeySchema:
-      - AttributeName: fileName
-        KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
-      Tags:
-       - Key: Name
-         Value: piifFileConfig
-       - Key: EnvType
-         Value: !Ref StageName
-       - Key: EnvName
-         Value: !Ref StageName
-       - Key: ProductLine
-         Value: !Ref ProductLine
-       - Key: ProductComponent
-         Value: NA
-       - Key: Provisioner
-         Value: aws-sam
-       - Key: OwnerContact
-         Value: NA
-       - Key: MaintenanceContact
-         Value: NA
-       - Key: CodeRepo
-         Value: https://github.com/Hobsons/starfish-data-channels
-       - Key: PII
-         Value: true      
-  reference:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: reference
-      AttributeDefinitions:
-      - AttributeName: key
-        AttributeType: S
-      KeySchema:
-      - AttributeName: key
-        KeyType: HASH
-      BillingMode: PAY_PER_REQUEST
-      Tags:
-       - Key: Name
-         Value: reference
-       - Key: EnvType
-         Value: !Ref StageName
-       - Key: EnvName
-         Value: !Ref StageName
-       - Key: ProductLine
-         Value: !Ref ProductLine
-       - Key: ProductComponent
-         Value: NA
-       - Key: Provisioner
-         Value: aws-sam
-       - Key: OwnerContact
-         Value: NA
-       - Key: MaintenanceContact
-         Value: NA
-       - Key: CodeRepo
-         Value: https://github.com/Hobsons/starfish-data-channels
-       - Key: PII
-         Value: true      
+Outputs:
+  MyFunctionArn:
+    Description: sffilemovementfunction Arn
+    Value: !GetAtt sffilemovementfunction.Arn      
       # Apply a permissions boundary
       # PermissionsBoundary:
         # 'arn:aws:iam::${AWS::AccountId}:policy/cdk-data-channels-processor-permission-boundary'
