@@ -52,8 +52,12 @@ Resources:
       Policies:
       # this statement allows your lambda the ability to trigger the built-in data channel log grabber lambda which will grab
       # cloudwatch logs and put them in s3 for further analysis
-      - AmazonS3FullAccess    
       - Statement:
+        - Sid: AWSLambdaS3Role
+          Effect: Allow
+          Action:
+            - s3:GetObject
+          Resource: "*"      
         - Sid: AWSLambdaVPCAccessExecutionRole
           Effect: Allow
           Action:
@@ -70,7 +74,7 @@ Resources:
              - elasticfilesystem:ClientWrite
              - elasticfilesystem:DescribeMountTargets
           Resource: "*"    
-  ImageBucketPermission:
+  SourceBucketPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: 'lambda:InvokeFunction'

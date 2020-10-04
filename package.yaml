@@ -31,7 +31,7 @@ Resources:
   sffilemovementfunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://ranjith-sam-code/dc04bf4c9e75ab538ff9c90302890eb4
+      CodeUri: s3://ranjith-sam-code/964df4b636735e6bb261776b5cfe1d30
       FunctionName: st-file-move-BuiltInProcessor
       Handler: index.handler
       Timeout: 900
@@ -52,8 +52,12 @@ Resources:
           DESTINATION_FOLDER:
             Ref: EFSpath
       Policies:
-      - AmazonS3FullAccess
       - Statement:
+        - Sid: AWSLambdaS3Role
+          Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource: '*'
         - Sid: AWSLambdaVPCAccessExecutionRole
           Effect: Allow
           Action:
@@ -70,7 +74,7 @@ Resources:
           - elasticfilesystem:ClientWrite
           - elasticfilesystem:DescribeMountTargets
           Resource: '*'
-  ImageBucketPermission:
+  SourceBucketPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
