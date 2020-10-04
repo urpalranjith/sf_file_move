@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Funtion to move the filesout file to datapump efs
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  StageName:
+    Type: String
+    Default: dev
+  ProductLine:
+    Type: String
+    Default: data-channels
+  vpcStackName:
+    Description: VPC and file system stack name
+    Type: String
+    Default: vpc-7aced912
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: sg-43dc9c20
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: The list of SubnetIDs in your Virtual Private Cloud (VPC)
+    Default: subnet-0c2e9a77,subnet-170d605b,subnet-a51c20cd
+  EFSpath:
+    Default: /mnt/files
+    Description: File system mount path
+    Type: String
+  AccessPointARN:
+    Type: String
+    Description: Access point ARN
+    Default: arn:aws:elasticfilesystem:ap-south-1:026420118215:access-point/fsap-05023fe8a92ec615d
+Resources:
+  sffilemovementfunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://ranjith-sam-code/2bc8ea70363e257d7006fb6574578d23
+      FunctionName: st-file-move-BuiltInProcessor
+      Handler: dist/index.handler
+      Timeout: 900
+      MemorySize: 3008
+      Runtime: nodejs12.x
+      VpcConfig:
+        SecurityGroupIds:
+          Ref: SecurityGroupIds
+        SubnetIds:
+          Ref: SubnetIDs
+      FileSystemConfigs:
+      - Arn:
+          Ref: AccessPointARN
+        LocalMountPath:
+          Ref: EFSpath
+      Environment:
+        Variables:
+          DESTINATION_FOLDER:
+            Ref: EFSpath
+      Policies:
+      - Statement:
+        - Sid: AWSLambdaVPCAccessExecutionRole
+          Effect: Allow
+          Action:
+          - logs:CreateLogGroup
+          - logs:CreateLogStream
+          - logs:PutLogEvents
+          - ec2:CreateNetworkInterface
+          - ec2:DescribeNetworkInterfaces
+          - ec2:AttachNetworkInterface
+          Resource: '*'
+        - Sid: AWSElasticFileSystemClientFullAccess
+          Effect: Allow
+          Action:
+          - elasticfilesystem:ClientWrite
+          - elasticfilesystem:DescribeMountTargets
+          Resource: '*'
+  ImageBucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Ref: sffilemovementfunction
+      Principal: s3.amazonaws.com
+      SourceAccount:
+        Ref: AWS::AccountId
+      SourceArn:
+        Fn::Sub: arn:aws:s3:::sf-file-move-pl
+Outputs:
+  FunctionName:
+    Description: sffilemovementfunction function
+    Value:
+      Ref: sffilemovementfunction
